@@ -303,7 +303,7 @@
 <div class="container">
     <div class="main-header">
         <h1 data-i18n="main_title">CalFlight - Optimizador de Rutas</h1>
-        <span class="tag">AlmeidaIngeniero </span>
+        <span class="tag">AlmeidaIngeniero</span>
     </div>
 
     <div class="content-body">
@@ -543,6 +543,7 @@
         const maxPaxSpace = parseFloat(document.getElementById('paxCapacity').value) || 0;
         const maxCargo = parseFloat(document.getElementById('cargoCapacity').value) || 0;
         const speed = parseFloat(document.getElementById('speedKmH').value) || 900;
+        const numAircraft = parseFloat(document.getElementById('numAircraft').value) || 1;
 
         let ecoDemands = [], busDemands = [], firstDemands = [], cargoDemands = [];
         let airportsData = [];
@@ -575,31 +576,50 @@
             });
         });
 
+        // 1. Obtener la demanda mínima diaria entre todos los aeropuertos seleccionados
         const minEcoDemand = Math.min(...ecoDemands);
         const minBusDemand = Math.min(...busDemands);
         const minFirstDemand = Math.min(...firstDemands);
         const minCargoDemand = Math.min(...cargoDemands);
 
-        const minPaxSpaceDemandDaily = minEcoDemand + (minBusDemand * 2) + (minFirstDemand * 3);
+        // 2. Calcular los vuelos diarios totales efectuados por la flota (1 trayecto por avión al día)
+        const flightsPerAircraftDay = 1; 
+        const totalDailyFlights = numAircraft * flightsPerAircraftDay;
 
-        let ecoSeats = 0, busSeats = 0, firstSeats = 0;
+        // 3. Demanda objetivo por vuelo individual para agotar la demanda sin saldo negativo
+        const targetEcoPerFlight = Math.floor(minEcoDemand / totalDailyFlights);
+        const targetBusPerFlight = Math.floor(minBusDemand / totalDailyFlights);
+        const targetFirstPerFlight = Math.floor(minFirstDemand / totalDailyFlights);
+        const targetCargoPerFlight = minCargoDemand / totalDailyFlights;
 
-        if (minPaxSpaceDemandDaily > 0) {
-            const ecoRatio = minEcoDemand / minPaxSpaceDemandDaily;
-            const busRatio = (minBusDemand * 2) / minPaxSpaceDemandDaily;
-            const firstRatio = (minFirstDemand * 3) / minPaxSpaceDemandDaily;
+        // 4. Espacio PAX requerido por vuelo (Eco=1, Bus=2, First=3)
+        const requiredPaxSpacePerFlight = targetEcoPerFlight + (targetBusPerFlight * 2) + (targetFirstPerFlight * 3);
 
-            ecoSeats = Math.floor(maxPaxSpace * ecoRatio);
-            busSeats = Math.floor((maxPaxSpace * busRatio) / 2);
-            firstSeats = Math.floor((maxPaxSpace * firstRatio) / 3);
+        let finalEco = 0, finalBus = 0, finalFirst = 0;
+
+        if (requiredPaxSpacePerFlight <= maxPaxSpace) {
+            // El avión tiene capacidad suficiente para cubrir toda la demanda del vuelo
+            finalEco = targetEcoPerFlight;
+            finalBus = targetBusPerFlight;
+            finalFirst = targetFirstPerFlight;
+        } else if (requiredPaxSpacePerFlight > 0) {
+            // La demanda por vuelo supera la capacidad: prorratear al espacio disponible del avión
+            const ecoRatio = targetEcoPerFlight / requiredPaxSpacePerFlight;
+            const busRatio = (targetBusPerFlight * 2) / requiredPaxSpacePerFlight;
+            const firstRatio = (targetFirstPerFlight * 3) / requiredPaxSpacePerFlight;
+
+            finalEco = Math.floor(maxPaxSpace * ecoRatio);
+            finalBus = Math.floor((maxPaxSpace * busRatio) / 2);
+            finalFirst = Math.floor((maxPaxSpace * firstRatio) / 3);
         }
 
-        const cargoPerFlight = Math.min(maxCargo, minCargoDemand);
+        // 5. Ajuste de Carga por vuelo sin exceder la capacidad máxima ni la demanda disponible
+        const finalCargo = Math.min(maxCargo, targetCargoPerFlight);
 
-        document.getElementById('resEco').innerText = ecoSeats;
-        document.getElementById('resBus').innerText = busSeats;
-        document.getElementById('resFirst').innerText = firstSeats;
-        document.getElementById('resCargo').innerText = cargoPerFlight.toFixed(1) + " T";
+        document.getElementById('resEco').innerText = finalEco;
+        document.getElementById('resBus').innerText = finalBus;
+        document.getElementById('resFirst').innerText = finalFirst;
+        document.getElementById('resCargo').innerText = finalCargo.toFixed(1) + " T";
 
         const tbody = document.getElementById('scheduleTableBody');
         tbody.innerHTML = '';
